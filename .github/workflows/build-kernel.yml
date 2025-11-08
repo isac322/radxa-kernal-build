@@ -25,14 +25,6 @@ jobs:
           repository: radxa-repo/bsp
           submodules: recursive
 
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ runner.os }}-kernel-rk2410
-          max-size: 2G
-          create-symlink: true
-          verbose: 1
-
       - name: Initialize kernel source
         run: ./bsp linux rk2410 --no-build
 
