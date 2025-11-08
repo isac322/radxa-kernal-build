@@ -1,0 +1,85 @@
+name: Build Rock Pi 5B+ Kernel
+
+on:
+  schedule:
+    # 매주 일요일 자정 (UTC)
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  build:
+    # ARM64 네이티브 러너 사용 (아래 중 하나 선택)
+    # 옵션 1: Self-hosted ARM64 러너
+    # runs-on: [self-hosted, linux, ARM64]
+    # 옵션 2: GitHub larger runners (Team/Enterprise plan 필요)
+    runs-on: ubuntu-24.04-arm64
+    # 옵션 3: Buildjet ARM64 러너 (third-party, 비용 발생)
+    # runs-on: buildjet-8vcpu-ubuntu-2204-arm
+
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # 큰 패키지들 제거하여 디스크 공간 확보
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate build timestamp
+        id: timestamp
+        run: echo "BUILD_DATE=$(date +%Y%m%d%H%M%S)" >> $GITHUB_OUTPUT
+
+      - name: Checkout BSP repository
+        uses: actions/checkout@v4
+        with:
+          repository: radxa-repo/bsp
+          submodules: recursive
+
+      - name: Initialize kernel source
+        run: ./bsp linux rk2410 --no-build
+
+      - name: Configure kernel modules
+        run: |
+          cd .src/linux
+          ./scripts/config --module CONFIG_TARGET_CORE
+          ./scripts/config --module CONFIG_TCM_IBLOCK
+          ./scripts/config --module CONFIG_TCM_FILEIO
+          ./scripts/config --module CONFIG_TCM_PSCSI
+          ./scripts/config --module CONFIG_ISCSI_TARGET
+          ./scripts/config --module CONFIG_NVME_MULTIPATH
+          ./scripts/config --module CONFIG_NVME_VERBOSE_ERRORS
+          ./scripts/config --module CONFIG_NVME_HWMON
+          ./scripts/config --module CONFIG_NVME_FC
+          ./scripts/config --module CONFIG_NVME_TCP
+          ./scripts/config --module CONFIG_NVME_AUTH
+          ./scripts/config --module CONFIG_NVME_TARGET
+
+      - name: Build kernel with timestamp
+        run: ./bsp --dirty linux rk2410 -r ${{ steps.timestamp.outputs.BUILD_DATE }}
+
+      - name: List built packages
+        run: ls -lh linux-*-rk2410_*_arm64.deb
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kernel-build-${{ steps.timestamp.outputs.BUILD_DATE }}
+          name: Kernel Build ${{ steps.timestamp.outputs.BUILD_DATE }}
+          draft: false
+          prerelease: false
+          files: linux-*-rk2410_*_arm64.deb
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-debs-${{ steps.timestamp.outputs.BUILD_DATE }}
+          path: linux-*-rk2410_*_arm64.deb
+          retention-days: 90
