@@ -20,7 +20,7 @@ jobs:
         run: echo "BUILD_DATE=$(date +%Y%m%d%H%M%S)" >> $GITHUB_OUTPUT
 
       - name: Checkout BSP repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: radxa-repo/bsp
           submodules: recursive
